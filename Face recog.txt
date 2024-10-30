@@ -1,0 +1,62 @@
+import cv2
+import face_recognition
+import numpy as np
+import pandas as pd
+import os
+from datetime import datetime
+
+def mark_attendance(name):
+    now = datetime.now()
+    dt_string = now.strftime('%Y-%m-%d %H:%M:%S')
+    attendance_df = pd.DataFrame(columns=['Name', 'Date & Time'])
+    
+    if os.path.exists('attendance.csv'):
+        attendance_df = pd.read_csv('attendance.csv')
+
+    if name not in attendance_df['Name'].values:
+        attendance_df = attendance_df.append({'Name': name, 'Date & Time': dt_string}, ignore_index=True)
+        attendance_df.to_csv('attendance.csv', index=False)
+
+known_faces = []
+known_names = []
+
+images_folder = 'images/'
+for filename in os.listdir(images_folder):
+    img = face_recognition.load_image_file(os.path.join(images_folder, filename))
+    encoding = face_recognition.face_encodings(img)[0]
+    known_faces.append(encoding)
+    known_names.append(os.path.splitext(filename)[0])  # Use the filename (without extension) as the name
+
+cap = cv2.VideoCapture(0)
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    face_locations = face_recognition.face_locations(rgb_frame)
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+
+    for face_encoding, face_location in zip(face_encodings, face_locations):
+       
+        matches = face_recognition.compare_faces(known_faces, face_encoding)
+        name = "Unknown"
+
+        if True in matches:
+            first_match_index = matches.index(True)
+            name = known_names[first_match_index]
+            mark_attendance(name)
+
+        top, right, bottom, left = face_location
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+
+    cv2.imshow('Face Recognition Attendance System', frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
